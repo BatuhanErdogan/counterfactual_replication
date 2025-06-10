@@ -105,7 +105,7 @@ heuristic_trait = brm(
 
 hybrid_trait = brm(
   data = eval_trials %>% filter(!is.na(trait_causal_slider)),
-  formula = trait_causal_slider ~ 1 + w_trait + (1 | game_id),
+  formula = trait_causal_slider ~ 1 + agent_type_factor*outcome_factor*w_trait + (1 | game_id),
   file = "brms_fits/hybrid_trait",
   seed = 1
 )
@@ -137,7 +137,7 @@ cf_situation = brm(
 
 heuristic_situation = brm(
   data = eval_trials %>% filter(!is.na(environment_causal_slider)),
-  formula = environment_causal_slider ~ 1 + discounted_expected_reward + (1 | game_id),
+  formula = environment_causal_slider ~ 1 + discounted_expected_reward.x + (1 | game_id),
   file = "brms_fits/heuristic_situation",
   seed = 1
 )
@@ -145,7 +145,7 @@ heuristic_situation = brm(
 # Hybrid model situation ----
 hybrid_situation = brm(
   data = eval_trials %>% filter(!is.na(environment_causal_slider)),
-  formula = environment_causal_slider ~ 1 + w_start + (1 | game_id),
+  formula = environment_causal_slider ~ 1 + discounted_expected_reward.x*w_start + (1 | game_id),
   file = "brms_fits/hybrid_situation",
   seed = 1
 )
