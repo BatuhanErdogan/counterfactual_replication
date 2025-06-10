@@ -8,7 +8,7 @@ The GitHub repository for the original study can be found at: https://github.com
 
 Brockbank et al. conducted an investigation of how well a counterfactual simulation model 
 explains subjects' explanations of agents' behavior. We have replicated their computations and verified their findings
-regarding the performances of the counterfactual model and the simpler heuristic model, and attempted
+regarding the performances of the counterfactual model and the simpler heuristic model, while attempting
 to develop a hybrid heuristic alternative that takes into account simple counterfactual assessments without commiting to a full simulation.
 The results reveal that the hybrid model predicts subjects' preferences less accurately than both the simple heuristic and the counterfactual 
 simulation models. 
