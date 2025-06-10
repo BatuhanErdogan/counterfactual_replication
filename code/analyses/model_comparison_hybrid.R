@@ -1,0 +1,161 @@
+# INIT ----
+library(brms)
+library(lme4)
+library(tidyverse)
+
+
+# GLOBALS ----
+DATA_DIR = "../../data/data_processed"
+
+# READ DATA ----
+load(file.path(DATA_DIR, "model_data.RData"))
+load(file.path(DATA_DIR, "experiment_data.RData"))
+
+# PROCESS DATA ----
+# Format trial data
+# TODO move all the below into `data_processing.R`
+eval_trials = eval_trials %>%
+  mutate(
+    agent_type_factor = ifelse(agent_type == "optimist", 1, -1),
+    outcome_factor = ifelse(outcome == "success", 1, -1)
+  )
+heuristic_model_predictions = heuristic_model_predictions %>%
+  rename(agent_type = agent,
+         outcome_binary = outcome)
+hybrid_model_predictions = hybrid_model_predictions %>%
+  rename(agent_type = agent,
+         outcome_binary = outcome)
+
+# Get average and SE of responses at trial level
+eval_summary = eval_trials %>%
+  group_by(trial_name, agent_type, agent_type_factor, outcome, outcome_factor) %>%
+  summarize(
+    mean_situation_counterfactual = mean(environment_counterfactual_slider, na.rm = T),
+    se_situation_counterfactual = sd(environment_counterfactual_slider, na.rm = T) /
+      sqrt(length(unique(eval_trials$game_id[!is.na(eval_trials$environment_counterfactual_slider)]))),
+    mean_trait_counterfactual = mean(trait_counterfactual_slider, na.rm = T),
+    se_trait_counterfactual = sd(trait_counterfactual_slider, na.rm = T) /
+      sqrt(length(unique(eval_trials$game_id[!is.na(eval_trials$trait_counterfactual_slider)]))),
+    mean_situation_causal = mean(environment_causal_slider, na.rm = T),
+    se_situation_causal = sd(environment_causal_slider, na.rm = T) /
+      sqrt(length(unique(eval_trials$game_id[!is.na(eval_trials$environment_causal_slider)]))),
+    mean_trait_causal = mean(trait_causal_slider, na.rm = T),
+    se_trait_causal = sd(trait_causal_slider, na.rm = T) /
+      sqrt(length(unique(eval_trials$game_id[!is.na(eval_trials$trait_causal_slider)]))),
+  ) %>%
+  ungroup()
+
+# Add trial averages to individual response data frame
+eval_trials = eval_trials %>%
+  left_join(
+    eval_summary %>% select(trial_name,
+                            mean_situation_counterfactual,
+                            se_situation_counterfactual,
+                            mean_trait_counterfactual,
+                            se_trait_counterfactual,
+                            mean_situation_causal,
+                            se_situation_causal,
+                            mean_trait_causal,
+                            se_trait_causal),
+    by = c("trial_name")
+  )
+
+# Add heuristic model predictions to individual response and trial average dataframes
+eval_trials = eval_trials %>%
+  left_join(
+    heuristic_model_predictions,
+    by = c("agent_type", "trial_name")
+  ) %>%
+  left_join(
+    hybrid_model_predictions,
+    by = c("agent_type", "trial_name")
+  )
+eval_summary = eval_summary %>%
+  left_join(
+    heuristic_model_predictions,
+    by = c("agent_type", "trial_name")
+  ) %>%
+  left_join(
+    hybrid_model_predictions,
+    by = c("agent_type", "trial_name")
+  )
+
+
+# Trait models ----
+baseline_trait = brm(
+  data = eval_trials %>% filter(!is.na(trait_causal_slider)),
+  formula = trait_causal_slider ~ 1 + (1 | game_id),
+  file = "brms_fits/baseline_trait",
+  seed = 1
+)
+
+cf_trait = brm(
+  data = eval_trials %>% filter(!is.na(trait_causal_slider)),
+  formula = trait_causal_slider ~ 1 + mean_trait_counterfactual + (1 | game_id),
+  file = "brms_fits/cf_trait",
+  seed = 1
+)
+
+heuristic_trait = brm(
+  data = eval_trials %>% filter(!is.na(trait_causal_slider)),
+  formula = trait_causal_slider ~ 1 + agent_type_factor*outcome_factor + (1 | game_id),
+  file = "brms_fits/heuristic_trait",
+  seed = 1
+)
+
+hybrid_trait = brm(
+  data = eval_trials %>% filter(!is.na(trait_causal_slider)),
+  formula = trait_causal_slider ~ 1 + w_trait + (1 | game_id),
+  file = "brms_fits/hybrid_trait",
+  seed = 1
+)
+
+# Add loo criterion ----
+baseline_trait = add_criterion(baseline_trait, "loo")
+cf_trait = add_criterion(cf_trait, "loo")
+heuristic_trait = add_criterion(heuristic_trait, "loo")
+hybrid_trait = add_criterion(hybrid_trait, "loo")
+
+# Compare models ----
+loo_compare(baseline_trait, cf_trait, heuristic_trait, hybrid_trait)
+
+
+# Situation models ----
+baseline_situation = brm(
+  data = eval_trials %>% filter(!is.na(environment_causal_slider)),
+  formula = environment_causal_slider ~ 1 + (1 | game_id),
+  file = "brms_fits/baseline_situation",
+  seed = 1
+)
+
+cf_situation = brm(
+  data = eval_trials %>% filter(!is.na(environment_causal_slider)),
+  formula = environment_causal_slider ~ 1 + mean_situation_counterfactual + (1 | game_id),
+  file = "brms_fits/cf_situation",
+  seed = 1
+)
+
+heuristic_situation = brm(
+  data = eval_trials %>% filter(!is.na(environment_causal_slider)),
+  formula = environment_causal_slider ~ 1 + discounted_expected_reward + (1 | game_id),
+  file = "brms_fits/heuristic_situation",
+  seed = 1
+)
+
+# Hybrid model situation ----
+hybrid_situation = brm(
+  data = eval_trials %>% filter(!is.na(environment_causal_slider)),
+  formula = environment_causal_slider ~ 1 + w_start + (1 | game_id),
+  file = "brms_fits/hybrid_situation",
+  seed = 1
+)
+
+# Add loo criterion ----
+baseline_situation = add_criterion(baseline_situation, "loo")
+cf_situation = add_criterion(cf_situation, "loo")
+heuristic_situation = add_criterion(heuristic_situation, "loo")
+hybrid_situation = add_criterion(hybrid_situation, "loo")
+
+# Compare models ----
+loo_compare(baseline_situation, cf_situation, heuristic_situation, hybrid_situation)
+
